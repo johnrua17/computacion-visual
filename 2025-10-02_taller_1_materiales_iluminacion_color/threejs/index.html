@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Taller 1: Materiales, Iluminación y Color - Three.js (Con GLB)</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            background: #1a1a1a;
+        }
+        
+        canvas {
+            display: block;
+        }
+        
+        #controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            font-size: 14px;
+            max-width: 300px;
+            z-index: 100;
+        }
+        
+        #controls h2 {
+            margin-bottom: 15px;
+            color: #4a9eff;
+            font-size: 18px;
+        }
+        
+        .control-group {
+            margin-bottom: 15px;
+        }
+        
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #aaa;
+        }
+        
+        button {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            background: #4a9eff;
+            border: none;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+        
+        button:hover {
+            background: #357abd;
+        }
+        
+        button.active {
+            background: #ff6b6b;
+        }
+        
+        .info {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #444;
+            font-size: 12px;
+            color: #888;
+        }
+        
+        select {
+            width: 100%;
+            padding: 8px;
+            background: #2a2a2a;
+            border: 1px solid #444;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+            z-index: 200;
+        }
+        
+        #loading.hidden {
+            display: none;
+        }
+        
+        .loader {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #4a9eff;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">
+        <h2>Cargando Mundo Virtual...</h2>
+        <div class="loader"></div>
+        <p id="loadingText">Inicializando escena...</p>
+    </div>
+
+    <div id="controls">
+        <h2>Controles del Mundo Virtual</h2>
+        
+        <div class="control-group">
+            <label>Tipo de Cámara:</label>
+            <button id="toggleCamera">Cambiar a Ortográfica</button>
+        </div>
+        
+        <div class="control-group">
+            <label>Preset de Iluminación:</label>
+            <select id="lightingPreset">
+                <option value="day">Día</option>
+                <option value="sunset">Atardecer</option>
+                <option value="night">Noche</option>
+            </select>
+        </div>
+        
+        <div class="control-group">
+            <button id="toggleAnimation">Pausar Animaciones</button>
+        </div>
+        
+        <div class="control-group">
+            <button id="toggleShaders">Alternar Shaders Procedurales</button>
+        </div>
+        
+        <div class="info">
+            <strong>Controles:</strong><br>
+            • Click y arrastra: rotar<br>
+            • Scroll: zoom<br>
+            • Click derecho: pan<br>
+        </div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+        // ============================================
+        // CONFIGURACIÓN INICIAL
+        // ============================================
+        
+        let scene, renderer, controls;
+        let perspectiveCamera, orthographicCamera, currentCamera;
+        let isAnimating = true;
+        let useProcedural = false;
+        
+        // Grupos de objetos y luces
+        const objects = [];
+        const lights = {};
+        
+        // Loading manager (DEBE IR ANTES del loader)
+        const loadingManager = new THREE.LoadingManager();
+        
+        // Loader de GLB (conectado al loading manager)
+        const gltfLoader = new GLTFLoader(loadingManager);
+        const loadingDiv = document.getElementById('loading');
+        const loadingText = document.getElementById('loadingText');
+        
+        let modelsToLoad = 3;
+        let modelsLoaded = 0;
+        
+        loadingManager.onStart = function(url, itemsLoaded, itemsTotal) {
+            console.log('📦 Iniciando carga:', url);
+            loadingText.textContent = `Cargando modelos... (${itemsLoaded}/${itemsTotal})`;
+        };
+        
+        loadingManager.onProgress = function(url, itemsLoaded, itemsTotal) {
+            console.log('⏳ Progreso:', url, `(${itemsLoaded}/${itemsTotal})`);
+            loadingText.textContent = `Cargando modelos... (${itemsLoaded}/${itemsTotal})`;
+        };
+        
+        loadingManager.onLoad = function() {
+            console.log('✅ Todos los modelos cargados!');
+            loadingText.textContent = '¡Listo! ✨';
+            setTimeout(() => {
+                console.log('🎉 Ocultando modal de carga');
+                loadingDiv.classList.add('hidden');
+            }, 500);
+        };
+        
+        loadingManager.onError = function(url) {
+            console.error('❌ Error cargando:', url);
+            modelsLoaded++;
+            // Si todos los modelos intentaron cargar (con éxito o error), ocultar modal
+            if (modelsLoaded >= modelsToLoad) {
+                console.log('⚠️ Finalizando carga con errores');
+                loadingText.textContent = 'Modelos cargados (algunos con primitivas)';
+                setTimeout(() => {
+                    loadingDiv.classList.add('hidden');
+                }, 1000);
+            }
+        };
+        
+        // ============================================
+        // PALETA DE COLOR (HSV convertido a RGB)
+        // ============================================
+        
+        const colorPalette = {
+            primary: new THREE.Color().setHSL(0.56, 0.7, 0.5),
+            secondary: new THREE.Color().setHSL(0.61, 0.6, 0.4),
+            accent: new THREE.Color().setHSL(0.08, 0.8, 0.6),
+            warm: new THREE.Color().setHSL(0.11, 0.7, 0.5),
+            neutral: new THREE.Color().setHSL(0, 0, 0.5),
+            ground: new THREE.Color().setHSL(0.25, 0.3, 0.3)
+        };
+
+        // ============================================
+        // SHADERS PROCEDURALES
+        // ============================================
+        
+        const checkerboardShader = {
+            vertexShader: `
+                varying vec2 vUv;
+                varying vec3 vPosition;
+                
+                void main() {
+                    vUv = uv;
+                    vPosition = position;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                uniform vec3 color1;
+                uniform vec3 color2;
+                uniform float scale;
+                varying vec2 vUv;
+                varying vec3 vPosition;
+                
+                void main() {
+                    vec2 pos = vPosition.xy * scale;
+                    float pattern = mod(floor(pos.x) + floor(pos.y), 2.0);
+                    vec3 color = mix(color1, color2, pattern);
+                    gl_FragColor = vec4(color, 1.0);
+                }
+            `
+        };
+        
+        const stripesShader = {
+            vertexShader: `
+                varying vec3 vPosition;
+                varying vec3 vNormal;
+                
+                void main() {
+                    vPosition = position;
+                    vNormal = normalize(normalMatrix * normal);
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                uniform vec3 color1;
+                uniform vec3 color2;
+                uniform float scale;
+                uniform float time;
+                varying vec3 vPosition;
+                varying vec3 vNormal;
+                
+                void main() {
+                    float pattern = sin((vPosition.x + vPosition.y + time * 0.5) * scale);
+                    pattern = smoothstep(-0.5, 0.5, pattern);
+                    vec3 color = mix(color1, color2, pattern);
+                    
+                    vec3 light = normalize(vec3(1.0, 1.0, 1.0));
+                    float diff = max(dot(vNormal, light), 0.3);
+                    
+                    gl_FragColor = vec4(color * diff, 1.0);
+                }
+            `
+        };
+        
+        const noiseShader = {
+            vertexShader: `
+                varying vec3 vPosition;
+                varying vec3 vNormal;
+                
+                void main() {
+                    vPosition = position;
+                    vNormal = normalize(normalMatrix * normal);
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                uniform vec3 color1;
+                uniform vec3 color2;
+                uniform float scale;
+                uniform float time;
+                varying vec3 vPosition;
+                varying vec3 vNormal;
+                
+                float noise(vec3 p) {
+                    return fract(sin(dot(p, vec3(12.9898, 78.233, 45.164))) * 43758.5453);
+                }
+                
+                void main() {
+                    vec3 pos = vPosition * scale + time * 0.1;
+                    float n = noise(floor(pos));
+                    vec3 color = mix(color1, color2, n);
+                    
+                    vec3 light = normalize(vec3(1.0, 1.0, 1.0));
+                    float diff = max(dot(vNormal, light), 0.3);
+                    
+                    gl_FragColor = vec4(color * diff, 1.0);
+                }
+            `
+        };
+
+        // ============================================
+        // FUNCIONES DE CARGA DE GLB
+        // ============================================
+        
+        function loadGLBModel(path, fallbackGeometry, position, scale, materialConfig, animationType) {
+            return new Promise((resolve) => {
+                gltfLoader.load(
+                    path,
+                    // Success
+                    function(gltf) {
+                        const model = gltf.scene;
+                        
+                        // Calcular tamaño del modelo
+                        const box = new THREE.Box3().setFromObject(model);
+                        const size = box.getSize(new THREE.Vector3());
+                        const center = box.getCenter(new THREE.Vector3());
+                        
+                        console.log('✅ Modelo GLB cargado:', path);
+                        console.log('   Tamaño original:', size);
+                        console.log('   Centro original:', center);
+                        
+                        // Aplicar escala primero
+                        model.scale.set(scale, scale, scale);
+                        
+                        // Posicionar en la escena
+                        model.position.set(...position);
+                        
+                        console.log('   Escala aplicada:', scale);
+                        
+                        // Aplicar materiales
+                        const pbrMaterial = new THREE.MeshStandardMaterial(materialConfig.pbr);
+                        const shaderMaterial = new THREE.ShaderMaterial(materialConfig.shader);
+                        
+                        let meshCount = 0;
+                        model.traverse((child) => {
+                            if (child.isMesh) {
+                                child.material = pbrMaterial;
+                                child.castShadow = true;
+                                child.receiveShadow = true;
+                                meshCount++;
+                            }
+                        });
+                        
+                        console.log('   Meshes encontrados:', meshCount);
+                        console.log('   Posición final:', model.position);
+                        console.log('   Escala final:', model.scale);
+                        
+                        model.userData.pbrMaterial = pbrMaterial;
+                        model.userData.shaderMaterial = shaderMaterial;
+                        model.userData.animationType = animationType;
+                        model.userData.baseY = position[1];
+                        model.userData.isGLB = true;
+                        
+                        resolve(model);
+                    },
+                    // Progress
+                    function(xhr) {
+                        const percent = (xhr.loaded / xhr.total * 100).toFixed(0);
+                        console.log(`⏳ ${path}: ${percent}%`);
+                    },
+                    // Error - usar fallback
+                    function(error) {
+                        console.error('❌ Error cargando GLB:', path, error);
+                        console.warn('⚠️ Usando geometría primitiva como fallback');
+                        
+                        const mesh = new THREE.Mesh(fallbackGeometry, new THREE.MeshStandardMaterial(materialConfig.pbr));
+                        mesh.position.set(...position);
+                        mesh.castShadow = true;
+                        mesh.receiveShadow = true;
+                        
+                        const shaderMaterial = new THREE.ShaderMaterial(materialConfig.shader);
+                        mesh.userData.pbrMaterial = mesh.material;
+                        mesh.userData.shaderMaterial = shaderMaterial;
+                        mesh.userData.animationType = animationType;
+                        mesh.userData.baseY = position[1];
+                        mesh.userData.isGLB = false;
+                        
+                        resolve(mesh);
+                    }
+                );
+            });
+        }
+
+        // ============================================
+        // INICIALIZACIÓN DE LA ESCENA
+        // ============================================
+        
+        async function init() {
+            loadingText.textContent = 'Creando escena...';
+            
+            // Escena
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a2e);
+            scene.fog = new THREE.Fog(0x1a1a2e, 10, 50);
+            
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.2;
+            document.body.appendChild(renderer.domElement);
+            
+            // Cámaras
+            setupCameras();
+            
+            // Controles
+            controls = new OrbitControls(currentCamera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.minDistance = 5;
+            controls.maxDistance = 50;
+            
+            // Iluminación
+            setupLighting('day');
+            
+            loadingText.textContent = 'Cargando objetos 3D...';
+            
+            // Suelo
+            const groundGeometry = new THREE.PlaneGeometry(50, 50);
+            const groundMaterial = new THREE.MeshStandardMaterial({
+                color: colorPalette.ground,
+                roughness: 0.8,
+                metalness: 0.2
+            });
+            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+            
+            // Cargar objetos (GLB o primitivas)
+            await loadAllObjects();
+            
+            // Event Listeners
+            setupEventListeners();
+            
+            // Animación
+            animate();
+        }
+        
+        async function loadAllObjects() {
+            // Modelo 1: Árbol (GLB) o Esfera (fallback)
+            const tree = await loadGLBModel(
+                '../glb_models/tree.glb',
+                new THREE.SphereGeometry(2, 32, 32),
+                [-5, 2, 0],
+                2,  // Escala para árbol (pequeño)
+                {
+                    pbr: {
+                        color: colorPalette.primary,
+                        roughness: 0.2,
+                        metalness: 0.8
+                    },
+                    shader: {
+                        uniforms: {
+                            color1: { value: colorPalette.primary },
+                            color2: { value: colorPalette.secondary },
+                            scale: { value: 2.0 }
+                        },
+                        vertexShader: checkerboardShader.vertexShader,
+                        fragmentShader: checkerboardShader.fragmentShader
+                    }
+                },
+                'rotate'
+            );
+            scene.add(tree);
+            objects.push(tree);
+            
+            // Modelo 2: Casa (GLB) o Cubo (fallback)
+            const house = await loadGLBModel(
+                '../glb_models/house.glb',
+                new THREE.BoxGeometry(3, 3, 3),
+                [5, 0, 0],  // Y=0 porque la casa es grande
+                0.03,  // Escala MUY pequeña para casa gigante (117 unidades → 3.5 unidades)
+                {
+                    pbr: {
+                        color: colorPalette.accent,
+                        roughness: 0.7,
+                        metalness: 0.1
+                    },
+                    shader: {
+                        uniforms: {
+                            color1: { value: colorPalette.accent },
+                            color2: { value: colorPalette.warm },
+                            scale: { value: 5.0 },
+                            time: { value: 0 }
+                        },
+                        vertexShader: stripesShader.vertexShader,
+                        fragmentShader: stripesShader.fragmentShader
+                    }
+                },
+                'sway'
+            );
+            scene.add(house);
+            objects.push(house);
+            
+            // Modelo 3: Coche (GLB) o Toro (fallback)
+            const car = await loadGLBModel(
+                '../glb_models/car.glb',
+                new THREE.TorusGeometry(1.5, 0.6, 16, 100),
+                [0, 0, -5],  // Y=0 en el suelo
+                0.05,  // Escala pequeña para coche grande (89 unidades → 4.5 unidades)
+                {
+                    pbr: {
+                        color: colorPalette.warm,
+                        roughness: 0.4,
+                        metalness: 0.6
+                    },
+                    shader: {
+                        uniforms: {
+                            color1: { value: colorPalette.warm },
+                            color2: { value: colorPalette.neutral },
+                            scale: { value: 3.0 },
+                            time: { value: 0 }
+                        },
+                        vertexShader: noiseShader.vertexShader,
+                        fragmentShader: noiseShader.fragmentShader
+                    }
+                },
+                'spin'
+            );
+            scene.add(car);
+            objects.push(car);
+            
+            // Objetos adicionales (primitivas)
+            const cylinder = createCylinder();
+            scene.add(cylinder);
+            objects.push(cylinder);
+            
+            const cone = createCone();
+            scene.add(cone);
+            objects.push(cone);
+            
+            const dodecahedron = createDodecahedron();
+            scene.add(dodecahedron);
+            objects.push(dodecahedron);
+        }
+        
+        function setupCameras() {
+            const aspect = window.innerWidth / window.innerHeight;
+            
+            perspectiveCamera = new THREE.PerspectiveCamera(60, aspect, 0.1, 1000);
+            perspectiveCamera.position.set(15, 10, 15);
+            
+            const frustumSize = 20;
+            orthographicCamera = new THREE.OrthographicCamera(
+                frustumSize * aspect / -2,
+                frustumSize * aspect / 2,
+                frustumSize / 2,
+                frustumSize / -2,
+                0.1,
+                1000
+            );
+            orthographicCamera.position.set(15, 10, 15);
+            
+            currentCamera = perspectiveCamera;
+        }
+        
+        function setupLighting(preset) {
+            Object.values(lights).forEach(light => {
+                if (light.parent) scene.remove(light);
+            });
+            
+            const presets = {
+                day: {
+                    ambient: { color: 0xffffff, intensity: 0.4 },
+                    key: { color: 0xfff5e1, intensity: 1.5, position: [10, 15, 5] },
+                    fill: { color: 0x87ceeb, intensity: 0.6, position: [-10, 10, -5] },
+                    rim: { color: 0xffa500, intensity: 0.8, position: [0, 5, -10] }
+                },
+                sunset: {
+                    ambient: { color: 0xff8866, intensity: 0.3 },
+                    key: { color: 0xff6347, intensity: 1.8, position: [15, 8, 0] },
+                    fill: { color: 0x4169e1, intensity: 0.4, position: [-10, 10, -5] },
+                    rim: { color: 0xff1493, intensity: 1.0, position: [0, 5, -15] }
+                },
+                night: {
+                    ambient: { color: 0x1a1a4e, intensity: 0.2 },
+                    key: { color: 0x6495ed, intensity: 1.0, position: [10, 15, 5] },
+                    fill: { color: 0x191970, intensity: 0.3, position: [-10, 10, -5] },
+                    rim: { color: 0x9370db, intensity: 0.6, position: [0, 5, -10] }
+                }
+            };
+            
+            const config = presets[preset];
+            
+            lights.ambient = new THREE.AmbientLight(config.ambient.color, config.ambient.intensity);
+            scene.add(lights.ambient);
+            
+            lights.key = new THREE.DirectionalLight(config.key.color, config.key.intensity);
+            lights.key.position.set(...config.key.position);
+            lights.key.castShadow = true;
+            lights.key.shadow.camera.left = -20;
+            lights.key.shadow.camera.right = 20;
+            lights.key.shadow.camera.top = 20;
+            lights.key.shadow.camera.bottom = -20;
+            lights.key.shadow.mapSize.width = 2048;
+            lights.key.shadow.mapSize.height = 2048;
+            scene.add(lights.key);
+            
+            lights.fill = new THREE.DirectionalLight(config.fill.color, config.fill.intensity);
+            lights.fill.position.set(...config.fill.position);
+            scene.add(lights.fill);
+            
+            lights.rim = new THREE.PointLight(config.rim.color, config.rim.intensity, 50);
+            lights.rim.position.set(...config.rim.position);
+            scene.add(lights.rim);
+            
+            const bgColors = {
+                day: 0x87ceeb,
+                sunset: 0xff6b4a,
+                night: 0x0a0a1e
+            };
+            scene.background = new THREE.Color(bgColors[preset]);
+            scene.fog.color = new THREE.Color(bgColors[preset]);
+        }
+        
+        function createCylinder() {
+            const geometry = new THREE.CylinderGeometry(1, 1, 6, 32);
+            const material = new THREE.MeshStandardMaterial({
+                color: colorPalette.secondary,
+                roughness: 0.5,
+                metalness: 0.3
+            });
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.set(0, 3, 5);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            mesh.userData.pbrMaterial = material;
+            mesh.userData.animationType = 'sway';
+            mesh.userData.baseY = 3;
+            return mesh;
+        }
+        
+        function createCone() {
+            const geometry = new THREE.ConeGeometry(1.5, 3, 32);
+            const material = new THREE.MeshStandardMaterial({
+                color: colorPalette.neutral,
+                roughness: 0.6,
+                metalness: 0.4
+            });
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.set(-8, 1.5, -5);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            mesh.userData.pbrMaterial = material;
+            mesh.userData.animationType = 'float';
+            mesh.userData.baseY = 1.5;
+            return mesh;
+        }
+        
+        function createDodecahedron() {
+            const geometry = new THREE.DodecahedronGeometry(2);
+            const material = new THREE.MeshStandardMaterial({
+                color: new THREE.Color().setHSL(0.8, 0.7, 0.5),
+                roughness: 0.3,
+                metalness: 0.7
+            });
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.set(8, 2, 5);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            mesh.userData.pbrMaterial = material;
+            mesh.userData.animationType = 'orbit';
+            mesh.userData.baseY = 2;
+            return mesh;
+        }
+        
+        function setupEventListeners() {
+            document.getElementById('toggleCamera').addEventListener('click', function() {
+                if (currentCamera === perspectiveCamera) {
+                    currentCamera = orthographicCamera;
+                    this.textContent = 'Cambiar a Perspectiva';
+                } else {
+                    currentCamera = perspectiveCamera;
+                    this.textContent = 'Cambiar a Ortográfica';
+                }
+                currentCamera.position.copy(
+                    currentCamera === perspectiveCamera ? 
+                    orthographicCamera.position : 
+                    perspectiveCamera.position
+                );
+                controls.object = currentCamera;
+            });
+            
+            document.getElementById('lightingPreset').addEventListener('change', function(e) {
+                setupLighting(e.target.value);
+            });
+            
+            document.getElementById('toggleAnimation').addEventListener('click', function() {
+                isAnimating = !isAnimating;
+                this.textContent = isAnimating ? 'Pausar Animaciones' : 'Reanudar Animaciones';
+            });
+            
+            document.getElementById('toggleShaders').addEventListener('click', function() {
+                useProcedural = !useProcedural;
+                this.classList.toggle('active');
+                this.textContent = useProcedural ? 'Usando Shaders' : 'Usando PBR';
+                
+                objects.forEach(obj => {
+                    if (obj.userData.shaderMaterial) {
+                        if (obj.userData.isGLB) {
+                            obj.traverse((child) => {
+                                if (child.isMesh) {
+                                    child.material = useProcedural ? 
+                                        obj.userData.shaderMaterial : 
+                                        obj.userData.pbrMaterial;
+                                }
+                            });
+                        } else {
+                            obj.material = useProcedural ? 
+                                obj.userData.shaderMaterial : 
+                                obj.userData.pbrMaterial;
+                        }
+                    }
+                });
+            });
+            
+            window.addEventListener('resize', onWindowResize);
+        }
+        
+        function onWindowResize() {
+            const aspect = window.innerWidth / window.innerHeight;
+            
+            perspectiveCamera.aspect = aspect;
+            perspectiveCamera.updateProjectionMatrix();
+            
+            const frustumSize = 20;
+            orthographicCamera.left = frustumSize * aspect / -2;
+            orthographicCamera.right = frustumSize * aspect / 2;
+            orthographicCamera.top = frustumSize / 2;
+            orthographicCamera.bottom = frustumSize / -2;
+            orthographicCamera.updateProjectionMatrix();
+            
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            const time = performance.now() * 0.001;
+            
+            if (isAnimating) {
+                objects.forEach((obj, index) => {
+                    switch(obj.userData.animationType) {
+                        case 'rotate':
+                            obj.rotation.y += 0.01;
+                            break;
+                        case 'bounce':
+                            obj.position.y = obj.userData.baseY + Math.sin(time + index) * 0.5;
+                            obj.rotation.x += 0.005;
+                            obj.rotation.y += 0.01;
+                            break;
+                        case 'spin':
+                            obj.rotation.x += 0.01;
+                            obj.rotation.z += 0.005;
+                            break;
+                        case 'sway':
+                            obj.rotation.z = Math.sin(time * 0.5) * 0.1;
+                            break;
+                        case 'float':
+                            obj.position.y = obj.userData.baseY + Math.sin(time * 2 + index) * 0.3;
+                            obj.rotation.y += 0.02;
+                            break;
+                        case 'orbit':
+                            obj.rotation.x += 0.005;
+                            obj.rotation.y += 0.01;
+                            obj.rotation.z += 0.003;
+                            break;
+                    }
+                    
+                    if (obj.material && obj.material.uniforms && obj.material.uniforms.time) {
+                        obj.material.uniforms.time.value = time;
+                    }
+                });
+                
+                if (lights.rim) {
+                    lights.rim.position.x = Math.cos(time * 0.5) * 10;
+                    lights.rim.position.z = Math.sin(time * 0.5) * 10;
+                }
+                
+                if (currentCamera === perspectiveCamera) {
+                    currentCamera.position.y += Math.sin(time * 0.5) * 0.005;
+                }
+            }
+            
+            controls.update();
+            renderer.render(scene, currentCamera);
+        }
+        
+        init();
+    </script>
+</body>
+</html>
+

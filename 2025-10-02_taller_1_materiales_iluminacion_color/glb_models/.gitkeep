@@ -1,0 +1,9 @@
+# Coloca tus archivos GLB aquí
+# 
+# Archivos esperados:
+# - tree.glb (orgánico)
+# - house.glb (arquitectónico) 
+# - car.glb (utilitario)
+#
+# Si no tienes los modelos, el código usará geometrías primitivas automáticamente.
+
