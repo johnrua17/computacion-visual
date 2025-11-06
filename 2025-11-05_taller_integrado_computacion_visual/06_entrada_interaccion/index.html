@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Punto 6: Entrada e Interacción</title>
+    <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+    <div id="container"></div>
+    
+    <div id="control-panel">
+        <h2>Control Panel</h2>
+        <div class="control-group">
+            <label>Object Color</label>
+            <input type="color" id="color-picker" value="#ff00ff">
+        </div>
+        <div class="control-group">
+            <label>Object Scale: <span id="scale-value">1.0</span></label>
+            <input type="range" id="scale-slider" min="0.5" max="2" step="0.1" value="1.0">
+        </div>
+        <button id="reset-btn">Reset Position</button>
+    </div>
+
+    <div id="status-panel">
+        <h3>Input Status</h3>
+        <p>Mouse: <span id="mouse-pos">(0, 0)</span></p>
+        <p>Keys: <span id="keys-pressed">None</span></p>
+        <p>Touch: <span id="touch-status">Inactive</span></p>
+        <p>Collisions: <span id="collision-count">0</span></p>
+        <p class="last-collision">Last: <span id="last-collision">-</span></p>
+    </div>
+
+    <div id="instructions">
+        <h3>Controls</h3>
+        <ul>
+            <li><strong>WASD / Arrows:</strong> Move object</li>
+            <li><strong>Space:</strong> Reset position</li>
+            <li><strong>R:</strong> Rotate object</li>
+            <li><strong>Mouse:</strong> Hover & click spheres</li>
+            <li><strong>Touch:</strong> Drag to move (mobile)</li>
+        </ul>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script type="module" src="src/main.js"></script>
+</body>
+</html>
