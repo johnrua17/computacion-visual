@@ -160,21 +160,23 @@ class DataLoader:
     @staticmethod
     def load_cifar10_data():
         """
-        Load CIFAR-10 dataset as example
+        Load CIFAR-10 dataset with memory optimization
         Replace this with your custom dataset loader
         """
         print("Loading CIFAR-10 dataset...")
         (x_train, y_train), (x_test, y_test) = keras.datasets.cifar10.load_data()
-        
+
         # Normalize pixel values
         x_train = x_train.astype('float32') / 255.0
         x_test = x_test.astype('float32') / 255.0
+
+        # Keep original 32x32 size to avoid memory issues
+        print(f"Using original CIFAR-10 size {x_train.shape[1:3]} to save memory")
         
-        # Resize images if needed
+        # No resizing needed - saves significant memory
         if Config.IMAGE_SIZE != (32, 32):
-            x_train = tf.image.resize(x_train, Config.IMAGE_SIZE).numpy()
-            x_test = tf.image.resize(x_test, Config.IMAGE_SIZE).numpy()
-        
+            print("⚠️  Warning: IMAGE_SIZE in config differs from data, using (32,32)")
+
         # Convert labels to categorical
         y_train = keras.utils.to_categorical(y_train, Config.NUM_CLASSES)
         y_test = keras.utils.to_categorical(y_test, Config.NUM_CLASSES)

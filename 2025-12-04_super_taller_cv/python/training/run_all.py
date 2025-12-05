@@ -19,9 +19,9 @@ def print_header(text):
 def run_cnn_training(skip_cv=False):
     """Run CNN from scratch training"""
     print_header("Training CNN from Scratch")
-    
-    script_path = os.path.join("python", "training", "cnn_from_scratch.py")
-    
+
+    script_path = "cnn_from_scratch.py"
+
     if skip_cv:
         print("⚠️  Skipping cross-validation...")
         # Modify to skip CV interactively
@@ -40,9 +40,9 @@ def run_cnn_training(skip_cv=False):
 def run_fine_tuning(models=None):
     """Run fine-tuning on selected models"""
     print_header("Fine-Tuning Pre-trained Models")
-    
-    script_path = os.path.join("python", "training", "fine_tuning.py")
-    
+
+    script_path = "fine_tuning.py"
+
     result = subprocess.run([sys.executable, script_path],
                           capture_output=False, text=True)
     
@@ -57,9 +57,9 @@ def run_fine_tuning(models=None):
 def run_comparison():
     """Run model comparison"""
     print_header("Generating Model Comparisons")
-    
-    script_path = os.path.join("python", "training", "compare_models.py")
-    
+
+    script_path = "compare_models.py"
+
     result = subprocess.run([sys.executable, script_path],
                           capture_output=False, text=True)
     
@@ -74,9 +74,9 @@ def run_comparison():
 def launch_dashboard():
     """Launch Streamlit dashboard"""
     print_header("Launching Interactive Dashboard")
-    
-    script_path = os.path.join("python", "training", "dashboard.py")
-    
+
+    script_path = "dashboard.py"
+
     print("📊 Starting Streamlit dashboard...")
     print("🌐 Dashboard will open at: http://localhost:8501")
     print("⚠️  Press Ctrl+C to stop the dashboard\n")
